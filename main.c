@@ -19,19 +19,55 @@
 #include "app.h"
 ////////////////////////////
 
-// Must be here to define i2c bus for imu
-#define I2C_BUS 2
-
-extern const char *message;
-
+////////////////////////////
+// Threads
 static pthread_t loopThread;
-static uint8_t running = 1;
+static pthread_t errorHandlerThread;
+
+////////////////////////////
+
+////////////////////////////
+// Application info
+const char *message = "Hello robotics project";
+uint8_t running;
+pthread_mutex_t robotStatusMutex = PTHREAD_MUTEX_INITIALIZER;
+RobotStatus robotStatus;
+
+pthread_mutex_t imuDataMutex = PTHREAD_MUTEX_INITIALIZER;
+rc_mpu_data_t imuData;
+//////////////////////
 
 // interrupt handler to catch ctrl-c
 static void __signal_handler(__attribute__((unused)) int dummy)
 {
     running = 0;
     return;
+}
+
+void errorHandler(void *unused)
+{
+    RobotStatus localStatus;
+    while (running)
+    {
+
+        // Make a local copy so we don't waste time holding the mutex
+        // For logic
+        pthread_mutex_lock(&robotStatusMutex);
+        localStatus = robotStatus;
+        pthread_mutex_unlock(&robotStatusMutex);
+
+        if (localStatus.systemError == 1)
+        {
+            log_error("System Error.Exiting");
+            running = false;
+        }
+
+        if (localStatus.imuStatus->initError)
+        {
+            log_error("IMU Error. Exiting");
+            running = false;
+        }
+    }
 }
 
 void *loop()
@@ -46,9 +82,11 @@ void *loop()
 int main(int argc, char **args)
 {
     log_info("Starting Robotics Project");
-    signal(SIGINT,__signal_handler);
+    signal(SIGINT, __signal_handler);
     pthread_create(&loopThread, NULL, loop, NULL);
+    pthread_create(&errorHandlerThread, NULL, loop, NULL);
 
+    running = 1;
     while (running)
     {
         sleep(1);
