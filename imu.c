@@ -2,6 +2,7 @@
 // ROBOTICS LIB HEADERS
 #include <rc/mpu.h>
 #include <rc/time.h>
+#include <rc/start_stop.h>
 ////////////////////////////
 ////////////////////////////
 // THIRD PARTY LIBS
@@ -33,13 +34,13 @@ void *imu_updater()
         pthread_mutex_lock(&robotStatusMutex);
         imuStatus.initError = 1;
         pthread_mutex_lock(&robotStatusMutex);
-        return -1;
+        rc_set_state(EXITING);
     }
 
     int accelStatus = 0;
     int gyroStatus = 0;
     int error = 0;
-    while (running)
+    while (rc_get_state() != EXITING)
     {
 
         accelStatus = 0;
@@ -69,5 +70,7 @@ void *imu_updater()
             error = 1;
             log_error("Error reading IMU Gyro Data");
         }
+
+        rc_usleep(1000000 / 100);
     }
 }

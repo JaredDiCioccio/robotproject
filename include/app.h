@@ -2,14 +2,14 @@
 #define APP_H
 
 #include "imu.h"
+#include "app.h"
 
 typedef struct RobotStatus
 {
     ImuStatus *imuStatus;
+    BatteryStatus *batteryStatus;
     bool systemError;
 } RobotStatus;
-
-
 
 extern uint8_t running;
 
