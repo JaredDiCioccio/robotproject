@@ -3,6 +3,7 @@
 
 #include "imu.h"
 #include "app.h"
+#include "battery.h"
 
 typedef struct RobotStatus
 {
