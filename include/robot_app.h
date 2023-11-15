@@ -1,9 +1,9 @@
 #ifndef APP_H
 #define APP_H
 
-#include "imu.h"
-#include "app.h"
-#include "battery.h"
+#include "robot_imu.h"
+#include "robot_app.h"
+#include "robot_battery.h"
 
 typedef struct RobotStatus
 {

@@ -6,8 +6,8 @@
 
 #include "spdlog/spdlog.h"
 
-#include "app.h"
-#include "battery.h"
+#include "robot_app.h"
+#include "robot_battery.h"
 
 #define VOLTAGE_DISCONNECT 1 // Threshold for detecting disconnected battery
 
