@@ -4,7 +4,7 @@
 #include <rc/start_stop.h>
 #include <rc/time.h>
 
-#include "log.h"
+#include "spdlog/spdlog.h"
 
 #include "app.h"
 #include "battery.h"
@@ -21,7 +21,10 @@ void *batteryStatusUpdater(void *unused)
 	double jack_voltage; // could be dc power supply or another battery
 
 	if (rc_adc_init() == -1)
-		return -1;
+	{
+		robotStatus.batteryStatus->error = 1;
+		return nullptr;
+	}
 
 	while (rc_get_state() != EXITING)
 	{
@@ -32,7 +35,7 @@ void *batteryStatusUpdater(void *unused)
 		// sanity check the SDC didn't return an error
 		if (pack_voltage < 0.0 || jack_voltage < 0.0)
 		{
-			log_error("Can't read voltages");
+			spdlog::error("Can't read voltages");
 			batteryStatus.error = true;
 		}
 

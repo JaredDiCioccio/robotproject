@@ -1,6 +1,9 @@
+#ifndef IMU_H
+#define IMU_H
+
 #include <rc/mpu.h>
 
-rc_mpu_data_t imuData;
+extern rc_mpu_data_t imuData;
 
 typedef struct ImuStatus
 {
@@ -8,3 +11,5 @@ typedef struct ImuStatus
     bool initError;
     bool gyroError;
 } ImuStatus;
+
+#endif

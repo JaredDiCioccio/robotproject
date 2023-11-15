@@ -6,7 +6,7 @@
 ////////////////////////////
 ////////////////////////////
 // THIRD PARTY LIBS
-#include "log.h"
+#include "spdlog/spdlog.h"
 ////////////////////////////
 // MY HEADERS
 #include "app.h"
@@ -30,7 +30,7 @@ void *imu_updater()
 
     if (rc_mpu_initialize(&imuData, conf))
     {
-        log_error("rc_mpu_initialize_failed");
+        spdlog::error("rc_mpu_initialize_failed");
         pthread_mutex_lock(&robotStatusMutex);
         imuStatus.initError = 1;
         pthread_mutex_lock(&robotStatusMutex);
@@ -59,7 +59,7 @@ void *imu_updater()
             pthread_mutex_unlock(&robotStatusMutex);
 
             error = 1;
-            log_error("Error reading IMU Accel Data");
+            spdlog::error("Error reading IMU Accel Data");
         }
         if (gyroStatus < 0)
         {
@@ -68,9 +68,11 @@ void *imu_updater()
             pthread_mutex_unlock(&robotStatusMutex);
 
             error = 1;
-            log_error("Error reading IMU Gyro Data");
+            spdlog::error("Error reading IMU Gyro Data");
         }
 
         rc_usleep(1000000 / 100);
     }
+
+    return nullptr;
 }

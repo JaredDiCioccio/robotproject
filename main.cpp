@@ -13,7 +13,7 @@
 #include <rc/time.h>
 ////////////////////////////
 // THIRD PARTY LIBS
-#include "log.h"
+#include "spdlog/spdlog.h"
 ////////////////////////////
 // MY HEADERS
 #include "app.h"
@@ -34,7 +34,7 @@ pthread_mutex_t robotStatusMutex = PTHREAD_MUTEX_INITIALIZER;
 RobotStatus robotStatus;
 
 pthread_mutex_t imuDataMutex = PTHREAD_MUTEX_INITIALIZER;
-rc_mpu_data_t imuData;
+
 //////////////////////
 
 // interrupt handler to catch ctrl-c
@@ -44,7 +44,7 @@ static void __signal_handler(__attribute__((unused)) int dummy)
     return;
 }
 
-void errorHandler(void *unused)
+void *errorHandler(void *unused)
 {
     RobotStatus localStatus;
     while (running)
@@ -58,42 +58,42 @@ void errorHandler(void *unused)
 
         if (localStatus.systemError == 1)
         {
-            log_error("System Error.Exiting");
+            spdlog::error("System Error.Exiting");
             running = false;
         }
 
         if (localStatus.imuStatus->initError)
         {
-            log_error("IMU Error. Exiting");
+            spdlog::error("IMU Error. Exiting");
             running = false;
         }
     }
 }
 
-void *loop()
+void *loop(void *unused)
 {
     static int counter = 0;
     while (running)
     {
-        log_info("[%d] %s", counter++, message);
+        spdlog::info("[%d] %s", counter++, message);
         sleep(1);
     }
 }
 int main(int argc, char **args)
 {
-    log_info("Starting Robotics Project");
+    spdlog::info("Starting Robotics Project");
     signal(SIGINT, __signal_handler);
     pthread_create(&loopThread, NULL, loop, NULL);
-    pthread_create(&errorHandlerThread, NULL, loop, NULL);
+    pthread_create(&errorHandlerThread, NULL, errorHandler, NULL);
 
     running = 1;
     while (running)
     {
         sleep(1);
     }
-    log_info("Waiting for threads to exit...");
+    spdlog::info("Waiting for threads to exit...");
     pthread_join(loopThread, NULL);
 
-    log_info("All threads exited. Exiting...");
+    spdlog::info("All threads exited. Exiting...");
     exit(0);
 }

@@ -1,15 +1,29 @@
 .phony: all
 
-CC=gcc
-CFLAGS=-static
-LDFLAGS=-lpthread -L. -lldlidar_driver 
+# CC = g++
+CPPFLAGS = -static -Iinclude -Ithirdparty
+LDFLAGS = -lpthread -L. -lldlidar_driver -lrobotcontrol
 
-all: executable
+SOURCES := $(wildcard ./*.cpp ./*.c)
+OBJECTS := $(patsubst %.cpp, %.o, $(SOURCES))
 
-executable: main.o
-	$(CC) $(CFLAGS) main.c thirdparty/log.c -Ithirdparty -Iinclude  -o robotproject
+$(info Sources: ${SOURCES})
 
-%.o: %.c
-	$(CC) -c $< -o $@ $(CFLAGS) $(LDFLAGS) -I./include -Ithirdparty
+$(info Objects: ${OBJECTS})
+
+.PHONY: all clean
+
+robot_main: $(OBJECTS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(LDFLAGS) -Ithirdparty -Iinclude  -o robotproject
+
+all: robot_main
+
+clean: 
+	rm -rf *.o
+	rm -rf robot_main
+	rm -rf robotproject
+
+# %.o: %.c
+# 	$(CC) -c $< -o $@ $(CFLAGS) $(LDFLAGS) -I./include -Ithirdparty
 
 
