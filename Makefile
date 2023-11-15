@@ -1,7 +1,7 @@
 .phony: all
 
 # CC = g++
-CPPFLAGS = -static -Iinclude -Ithirdparty
+CPPFLAGS = -Iinclude -Ithirdparty
 LDFLAGS = -lpthread -L. -lldlidar_driver -lrobotcontrol
 
 SOURCES := $(wildcard ./*.cpp ./*.c)

@@ -12,6 +12,11 @@ typedef struct RobotStatus
     bool systemError;
 } RobotStatus;
 
+typedef struct RobotState
+{
+    rc_mpu_data_t *imuData;
+} RobotState;
+
 extern uint8_t running;
 
 extern pthread_mutex_t robotStatusMutex;
