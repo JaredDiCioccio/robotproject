@@ -13,6 +13,8 @@
 
 // Note, some of these functions taken from the ldlidar demo application
 
+double lidarBins[360];
+
 uint64_t GetTimestamp(void)
 {
     std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> tp =

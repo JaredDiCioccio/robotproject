@@ -9,3 +9,7 @@ typedef struct CurrentMotorState{
 void init(){
     rc_motor_init();
 }
+
+void stopMotors();
+void setMotorLeft(float duty);
+void setMotorRight(float duty);

@@ -25,4 +25,7 @@ extern RobotStatus robotStatus;
 extern pthread_mutex_t imuDataMutex;
 extern rc_mpu_data_t imuData;
 
+extern pthread_mutex_t robotStateMutex;
+extern RobotState robotState;
+
 #endif

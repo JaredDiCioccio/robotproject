@@ -79,6 +79,24 @@ void *loop(void *unused)
         sleep(1);
     }
 }
+
+#include <rc/motor.h>
+#include "robot_motor.h"
+
+void startTurning(bool left)
+{
+    stopMotors();
+    if (left)
+    {
+        setMotorRight(0.10);
+        setMotorLeft(-0.10);
+    }
+    else
+    {
+        setMotorLeft(0.10);
+        setMotorRight(-0.10);
+    }
+}
 int main(int argc, char **args)
 {
     spdlog::info("Starting Robotics Project");
