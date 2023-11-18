@@ -45,14 +45,15 @@ pthread_mutex_t robotStatusMutex = PTHREAD_MUTEX_INITIALIZER;
 RobotStatus robotStatus;
 RobotState robotState;
 
-#define STOP_THRESHOLD 300
+#define STOP_THRESHOLD 500
 
 //////////////////////
 
 // interrupt handler to catch ctrl-c
 static void __signal_handler(__attribute__((unused)) int dummy)
 {
-    running = 0;
+    spdlog::info("Exiting");
+    rc_set_state(EXITING);
     return;
 }
 
@@ -85,21 +86,13 @@ void *errorHandler(void *unused)
             running = false;
         }
     }
-}
-
-void *loop(void *unused)
-{
-    static int counter = 0;
-    while (running)
-    {
-        spdlog::info("[%d] %s", counter++, message);
-        sleep(1);
-    }
+    pthread_exit(NULL);
 }
 
 // Most of this borrowed from robot control lib template
 int startup()
 {
+    spdlog::trace("robot_main.cpp startup()");
     if (rc_kill_existing_process(2.0) < -2)
         return -1;
 
@@ -121,75 +114,136 @@ int startup()
     // Assign functions to be called when button events occur
     rc_button_set_callbacks(RC_BTN_PIN_PAUSE, on_pause_press, on_pause_release);
 
-    robot_motor_init();
+    int ret = robot_motor_init();
+    if (ret != 0)
+    {
+        spdlog::error("ERROR: failed to initialize motors");
+        return -1;
+    }
+    spdlog::info("Initialized motors");
+    spdlog::info("Testing motors Forward");
+    moveForward();
+    sleep(2);
+    spdlog::info("Testing motors Backward");
+    moveBackward();
+    sleep(2);
+    stop();
     robot_lidar_init(&robotState);
+    spdlog::info("Initialized lidar");
     // make PID file to indicate your project is running
     // due to the check made on the call to rc_kill_existing_process() above
     // we can be fairly confident there is no PID file already and we can
     // make our own safely.
     rc_make_pid_file();
+    spdlog::trace("robot_main.cpp startup() return");
+    return 0;
 }
 
 int main(int argc, char **args)
 {
     const auto startupTime = std::chrono::system_clock::now();
-    int epochCount = startupTime.time_since_epoch().count();
-    std::string filename = "robot_log_" + std::to_string(epochCount) + ".log";
-    std::vector<spdlog::sink_ptr> sinks;
-    sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
-    sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_st>(filename));
-    auto combined_logger = std::make_shared<spdlog::logger>("RobotLogger", std::begin(sinks), std::end(sinks));
+    // int epochCount = startupTime.time_since_epoch().count();
+    // std::string filename = "robot_log_" + std::to_string(epochCount) + ".log";
+    // std::vector<spdlog::sink_ptr> sinks;
+    // sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
+    // sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_st>(filename));
+    // auto combined_logger = std::make_shared<spdlog::logger>("RobotLogger", std::begin(sinks), std::end(sinks));
     // register it if you need to access it globally
-    spdlog::register_logger(combined_logger);
+    // spdlog::register_logger(combined_logger);
+    spdlog::set_level(spdlog::level::debug);
     spdlog::info("Starting Robotics Project");
+
+    int ret = startup();
+    if (ret != 0)
+    {
+        spdlog::error("Error starting up robot!");
+        exit(1);
+    }
     signal(SIGINT, __signal_handler);
-    pthread_create(&loopThread, NULL, loop, NULL);
-    pthread_create(&errorHandlerThread, NULL, errorHandler, NULL);
-    pthread_create(&imuUpdateThread, NULL, imu_updater, NULL);
+    spdlog::debug("Registered signal handler");
+    // pthread_create(&loopThread, NULL, loop, NULL);
+    // pthread_create(&errorHandlerThread, NULL, errorHandler, NULL);
+    // pthread_create(&imuUpdateThread, NULL, imu_updater, NULL);
+    pthread_create(&lidarUpdateThread, NULL, robot_lidar_updater, NULL);
+
+    spdlog::debug("Setting inital state to PAUSED");
 
     rc_set_state(PAUSED); // Start paused until the pause button is pressed
 
+    spdlog::debug("Entering loop");
+    std::unordered_map<int, ldlidar::PointData> *map = robotState.lidarMap;
+    spdlog::debug("Grabbed reference to lidar map");
     while (rc_get_state() != EXITING)
     {
+        auto currentTime = std::chrono::system_clock::now().time_since_epoch().count();
+        spdlog::debug("Tick: {0}", currentTime);
+        bool shouldStop = false;
+        for (int i = 345; i < 360 && !shouldStop; i++)
         {
-            bool shouldStop = false;
-            for (int i = 345; i < 360 && !shouldStop; i++)
+            if (map->count(i))
             {
-                std::unordered_map<int, ldlidar::PointData> *map = robotState.lidarMap;
-                if (map->count(i))
+                ldlidar::PointData pointData = map->at(i);
+                if (pointData.stamp > (currentTime - 50000000)) // 50 millsecond falloff?
                 {
-                    ldlidar::PointData pointData = map->at(i);
+                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTime, currentTime - pointData.stamp, i, pointData.distance);
+                    map->erase(i);
+                }
+                else
+                {
                     if (pointData.distance < STOP_THRESHOLD)
                     {
+                        spdlog::info("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
                         shouldStop = true;
                     }
                 }
-            }
-
-            for (int i = 0; i < 15 && !shouldStop; i++)
-            {
-                std::unordered_map<int, ldlidar::PointData> *map = robotState.lidarMap;
-                if (map->count(i))
-                {
-                    ldlidar::PointData pointData = map->at(i);
-                    if (pointData.distance < STOP_THRESHOLD)
-                    {
-                        shouldStop = true;
-                    }
-                }
-            }
-            if (shouldStop)
-            {
-                stopMotors();
-            }
-            else
-            {
             }
         }
+
+        for (int i = 0; i < 15 && !shouldStop; i++)
+        {
+            if (map->count(i))
+            {
+                ldlidar::PointData pointData = map->at(i);
+                if (pointData.stamp > (currentTime - 50000000)) // 50 millsecond falloff?
+                {
+                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTime, currentTime - pointData.stamp, i, pointData.distance);
+                    map->erase(i);
+                }
+                else
+                {
+                    if (pointData.distance < STOP_THRESHOLD)
+                    {
+                        spdlog::info("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
+                        shouldStop = true;
+                    }
+                }
+            }
+        }
+
+        if (shouldStop || rc_get_state() == PAUSED)
+        {
+            if (shouldStop)
+            {
+                spdlog::info("Stopping because we should stop");
+            }
+            if (rc_get_state() == PAUSED)
+            {
+                spdlog::info("Sopping because we're paused");
+            }
+
+            stopMotors();
+        }
+        else
+        {
+            moveForward();
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
+    rc_motor_cleanup();
+    rc_gpio_cleanup(RC_BTN_PIN_PAUSE);
     spdlog::info("Waiting for threads to exit...");
-    pthread_join(loopThread, NULL);
+    pthread_join(lidarUpdateThread, NULL);
 
     spdlog::info("All threads exited. Exiting...");
     exit(0);

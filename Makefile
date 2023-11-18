@@ -5,20 +5,26 @@ CPPFLAGS = -Iinclude -Ithirdparty -std=c++11 #beaglebone doesn't have a very goo
 LDFLAGS = -lpthread -lrobotcontrol
 
 SOURCES := $(wildcard ./*.cpp ./*.c)
+INCLUDES := $(wildcard ./include/*.h)
+
 OBJECTS := $(patsubst %.cpp, %.o, $(SOURCES))
 
-$(info Sources: ${SOURCES})
+# $(info Sources: ${SOURCES})
 
-$(info Objects: ${OBJECTS})
+# $(info Objects: ${OBJECTS})
 
-.PHONY: all clean
+.PHONY: all clean remote
 
 EXECUTABLE = 
 
-robot_main: $(OBJECTS)
+robot_main: $(OBJECTS) $(INCLUDES)
 	$(CXX) $(CFLAGS) -o $@ $^ $(LDFLAGS) -Ithirdparty -Iinclude -o robotproject
 
 all: robot_main
+
+remote:
+	rsync -av --exclude="*.o" --exclude="robotproject" . debian@192.168.7.2:robotproject
+	ssh debian@192.168.7.2 "cd robotproject;make"
 
 clean: 
 	rm -rf *.o

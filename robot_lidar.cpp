@@ -72,7 +72,7 @@ void *robot_lidar_updater(void *unused)
 
     ldlidar::Points2D laser_scan_points;
 
-    while (ldlidar::LDLidarDriverLinuxInterface::Ok())
+    while (ldlidar::LDLidarDriverLinuxInterface::Ok() && rc_get_state() != EXITING)
     {
         switch (lidar_drv->GetLaserScanData(laser_scan_points, 1500))
         {
@@ -102,6 +102,7 @@ void *robot_lidar_updater(void *unused)
         default:
             break;
         }
+        lidar_drv->Stop();
         std::this_thread::sleep_for(std::chrono::milliseconds(166)); // about 6 hz
     }
     return (void *)1;

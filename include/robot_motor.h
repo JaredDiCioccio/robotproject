@@ -21,7 +21,7 @@ struct MotorConfiguration{
     int polarity;
 };
 
-void robot_motor_init();
+int robot_motor_init();
 void stop();
 void stopMotors();
 void moveForward();
