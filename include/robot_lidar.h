@@ -5,5 +5,5 @@
 
 void robot_lidar_init(RobotState *robotState);
 void *robot_lidar_updater(void *unused);
-
+uint64_t GetTimestamp(void);
 #endif

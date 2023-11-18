@@ -141,7 +141,7 @@ int startup()
 
 int main(int argc, char **args)
 {
-    const auto startupTime = std::chrono::system_clock::now();
+    const auto startupTime = std::chrono::steady_clock::now();
     // int epochCount = startupTime.time_since_epoch().count();
     // std::string filename = "robot_log_" + std::to_string(epochCount) + ".log";
     // std::vector<spdlog::sink_ptr> sinks;
@@ -173,19 +173,21 @@ int main(int argc, char **args)
     spdlog::debug("Entering loop");
     std::unordered_map<int, ldlidar::PointData> *map = robotState.lidarMap;
     spdlog::debug("Grabbed reference to lidar map");
+
     while (rc_get_state() != EXITING)
     {
-        auto currentTime = std::chrono::system_clock::now().time_since_epoch().count();
-        spdlog::debug("Tick: {0}", currentTime);
+        uint64_t currentTimestamp = GetTimestamp();
+        spdlog::debug("Tick: {0}", currentTimestamp);
         bool shouldStop = false;
         for (int i = 345; i < 360 && !shouldStop; i++)
         {
             if (map->count(i))
             {
                 ldlidar::PointData pointData = map->at(i);
-                if (pointData.stamp > (currentTime - 50000000)) // 50 millsecond falloff?
+                spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
+                if (currentTimestamp - pointData.stamp > 250000000) // 250 millsecond falloff?
                 {
-                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTime, currentTime - pointData.stamp, i, pointData.distance);
+                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
                     map->erase(i);
                 }
                 else
@@ -203,10 +205,13 @@ int main(int argc, char **args)
         {
             if (map->count(i))
             {
+
                 ldlidar::PointData pointData = map->at(i);
-                if (pointData.stamp > (currentTime - 50000000)) // 50 millsecond falloff?
+                spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
+
+                if (pointData.stamp > (currentTimestamp - 50000000)) // 50 millsecond falloff?
                 {
-                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTime, currentTime - pointData.stamp, i, pointData.distance);
+                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
                     map->erase(i);
                 }
                 else

@@ -46,13 +46,13 @@ void *robot_lidar_updater(void *unused)
 
     if (lidar_drv->Connect(ldlidar_type_dest, serial_port_name, serial_baudrate_val))
     {
-        // spdlog::info("ldlidar serial connect is success");
+        spdlog::info("ldlidar serial connect is success");
         // LidarPowerOn();
     }
     else
     {
-        // spdlog::error("ldlidar serial connect is fail");
-        // exit(EXIT_FAILURE);
+        spdlog::error("ldlidar serial connect is fail");
+        exit(EXIT_FAILURE);
     }
 
     if (lidar_drv->WaitLidarComm(3500))
@@ -71,7 +71,7 @@ void *robot_lidar_updater(void *unused)
     }
 
     ldlidar::Points2D laser_scan_points;
-
+    spdlog::info("Entering lidar loop");
     while (ldlidar::LDLidarDriverLinuxInterface::Ok() && rc_get_state() != EXITING)
     {
         switch (lidar_drv->GetLaserScanData(laser_scan_points, 1500))
@@ -86,24 +86,30 @@ void *robot_lidar_updater(void *unused)
             {
                 point.stamp, point.angle, point.distance, point.intensity;
                 int roundedAngle = std::round(point.angle);
+                if (pointsMap.count(roundedAngle))
+                {
+                    pointsMap.erase(roundedAngle);
+                }
                 pointsMap.insert({roundedAngle, point});
             }
             break;
         }
         case ldlidar::LidarStatus::DATA_TIME_OUT:
         {
-            lidar_drv->Stop();
+            spdlog::error("lidar timeout");
             break;
         }
         case ldlidar::LidarStatus::DATA_WAIT:
         {
+            spdlog::error("lidar data wait");
             break;
         }
         default:
+            spdlog::error("lidar unknow error");
             break;
         }
-        lidar_drv->Stop();
         std::this_thread::sleep_for(std::chrono::milliseconds(166)); // about 6 hz
     }
+    lidar_drv->Stop();
     return (void *)1;
 }
