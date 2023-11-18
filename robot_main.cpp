@@ -4,26 +4,37 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <unordered_map>
 // SYSTEM HEADERS
 #include <pthread.h>
 #include <signal.h>
 ////////////////////////////
 // ROBOTICS LIB HEADERS
-#include <rc/mpu.h>
-#include <rc/time.h>
+#include <robotcontrol.h>
 ////////////////////////////
 // THIRD PARTY LIBS
 #include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_sinks.h"
+#include "spdlog/sinks/basic_file_sink.h"
+#include "ldlidar_driver/ldlidar_datatype.h"
 ////////////////////////////
 // MY HEADERS
 #include "robot_app.h"
+#include "robot_imu.h"
+#include "robot_battery.h"
+#include "robot_motor.h"
+#include "robot_lidar.h"
 ////////////////////////////
 
 ////////////////////////////
 // Threads
 static pthread_t loopThread;
 static pthread_t errorHandlerThread;
+static pthread_t imuUpdateThread;
+static pthread_t batteryUpdateThread;
+static pthread_t lidarUpdateThread;
 
+pthread_mutex_t imuDataMutex = PTHREAD_MUTEX_INITIALIZER;
 ////////////////////////////
 
 ////////////////////////////
@@ -32,8 +43,9 @@ const char *message = "Hello robotics project";
 uint8_t running;
 pthread_mutex_t robotStatusMutex = PTHREAD_MUTEX_INITIALIZER;
 RobotStatus robotStatus;
+RobotState robotState;
 
-pthread_mutex_t imuDataMutex = PTHREAD_MUTEX_INITIALIZER;
+#define STOP_THRESHOLD 300
 
 //////////////////////
 
@@ -43,6 +55,11 @@ static void __signal_handler(__attribute__((unused)) int dummy)
     running = 0;
     return;
 }
+
+// function declarations
+void on_pause_press();
+void on_pause_release();
+int startup();
 
 void *errorHandler(void *unused)
 {
@@ -80,38 +97,140 @@ void *loop(void *unused)
     }
 }
 
-#include <rc/motor.h>
-#include "robot_motor.h"
-
-void startTurning(bool left)
+// Most of this borrowed from robot control lib template
+int startup()
 {
-    stopMotors();
-    if (left)
+    if (rc_kill_existing_process(2.0) < -2)
+        return -1;
+
+    // start signal handler so we can exit cleanly
+    if (rc_enable_signal_handler() == -1)
     {
-        setMotorRight(0.10);
-        setMotorLeft(-0.10);
+        spdlog::error("ERROR: failed to start signal handler");
+        return -1;
     }
-    else
+
+    // initialize pause button
+    if (rc_button_init(RC_BTN_PIN_PAUSE, RC_BTN_POLARITY_NORM_HIGH,
+                       RC_BTN_DEBOUNCE_DEFAULT_US))
     {
-        setMotorLeft(0.10);
-        setMotorRight(-0.10);
+        spdlog::error("ERROR: failed to initialize pause button");
+        return -1;
     }
+
+    // Assign functions to be called when button events occur
+    rc_button_set_callbacks(RC_BTN_PIN_PAUSE, on_pause_press, on_pause_release);
+
+    robot_motor_init();
+    robot_lidar_init(&robotState);
+    // make PID file to indicate your project is running
+    // due to the check made on the call to rc_kill_existing_process() above
+    // we can be fairly confident there is no PID file already and we can
+    // make our own safely.
+    rc_make_pid_file();
 }
+
 int main(int argc, char **args)
 {
+    const auto startupTime = std::chrono::system_clock::now();
+    int epochCount = startupTime.time_since_epoch().count();
+    std::string filename = "robot_log_" + std::to_string(epochCount) + ".log";
+    std::vector<spdlog::sink_ptr> sinks;
+    sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
+    sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_st>(filename));
+    auto combined_logger = std::make_shared<spdlog::logger>("RobotLogger", std::begin(sinks), std::end(sinks));
+    // register it if you need to access it globally
+    spdlog::register_logger(combined_logger);
     spdlog::info("Starting Robotics Project");
     signal(SIGINT, __signal_handler);
     pthread_create(&loopThread, NULL, loop, NULL);
     pthread_create(&errorHandlerThread, NULL, errorHandler, NULL);
+    pthread_create(&imuUpdateThread, NULL, imu_updater, NULL);
 
-    running = 1;
-    while (running)
+    rc_set_state(PAUSED); // Start paused until the pause button is pressed
+
+    while (rc_get_state() != EXITING)
     {
-        sleep(1);
+        {
+            bool shouldStop = false;
+            for (int i = 345; i < 360 && !shouldStop; i++)
+            {
+                std::unordered_map<int, ldlidar::PointData> *map = robotState.lidarMap;
+                if (map->count(i))
+                {
+                    ldlidar::PointData pointData = map->at(i);
+                    if (pointData.distance < STOP_THRESHOLD)
+                    {
+                        shouldStop = true;
+                    }
+                }
+            }
+
+            for (int i = 0; i < 15 && !shouldStop; i++)
+            {
+                std::unordered_map<int, ldlidar::PointData> *map = robotState.lidarMap;
+                if (map->count(i))
+                {
+                    ldlidar::PointData pointData = map->at(i);
+                    if (pointData.distance < STOP_THRESHOLD)
+                    {
+                        shouldStop = true;
+                    }
+                }
+            }
+            if (shouldStop)
+            {
+                stopMotors();
+            }
+            else
+            {
+            }
+        }
     }
+
     spdlog::info("Waiting for threads to exit...");
     pthread_join(loopThread, NULL);
 
     spdlog::info("All threads exited. Exiting...");
     exit(0);
+}
+
+/**
+ * Make the Pause button toggle between paused and running states.
+ */
+void on_pause_release()
+{
+    if (rc_get_state() == RUNNING)
+    {
+        spdlog::info("Changing from RUNNING -> PAUSED");
+        rc_set_state(PAUSED);
+    }
+    else if (rc_get_state() == PAUSED)
+    {
+        spdlog::info("Changing from PAUSED -> RUNNING");
+        rc_set_state(RUNNING);
+    }
+    return;
+}
+
+/**
+ * If the user holds the pause button for 2 seconds, set state to EXITING which
+ * triggers the rest of the program to exit cleanly.
+ **/
+void on_pause_press()
+{
+    int i;
+    const int samples = 100;     // check for release 100 times in this period
+    const int us_wait = 2000000; // 2 seconds
+
+    // now keep checking to see if the button is still held down
+    for (i = 0; i < samples; i++)
+    {
+        rc_usleep(us_wait / samples);
+        if (rc_button_get_state(RC_BTN_PIN_PAUSE) == RC_BTN_STATE_RELEASED)
+            return;
+    }
+    spdlog::info("long press detected, shutting down");
+    rc_set_state(EXITING);
+    return;
 }

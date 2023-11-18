@@ -64,4 +64,5 @@ void *batteryStatusUpdater(void *unused)
 	}
 
 	rc_adc_cleanup();
+	pthread_exit(NULL);
 }

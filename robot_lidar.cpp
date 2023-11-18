@@ -8,12 +8,16 @@
 
 // In typical fashion this has to be included before ldlidar_driver_linux.h
 #include "spdlog/spdlog.h"
+#include <unordered_map>
 
 #include "ldlidar_driver/ldlidar_driver_linux.h"
+#include "robot_app.h"
 
 // Note, some of these functions taken from the ldlidar demo application
 
-double lidarBins[360];
+ldlidar::Points2D pointsBuffer;
+
+std::unordered_map<int, ldlidar::PointData> pointsMap;
 
 uint64_t GetTimestamp(void)
 {
@@ -23,7 +27,12 @@ uint64_t GetTimestamp(void)
     return ((uint64_t)tmp.count());
 }
 
-void *lidarUpdater(void *unused)
+void robot_lidar_init(RobotState *robotState)
+{
+    robotState->lidarMap = &pointsMap;
+}
+
+void *robot_lidar_updater(void *unused)
 {
 
     std::string ldlidar_type_str = "LD19";
@@ -76,6 +85,8 @@ void *lidarUpdater(void *unused)
             for (auto point : laser_scan_points)
             {
                 point.stamp, point.angle, point.distance, point.intensity;
+                int roundedAngle = std::round(point.angle);
+                pointsMap.insert({roundedAngle, point});
             }
             break;
         }
@@ -91,6 +102,7 @@ void *lidarUpdater(void *unused)
         default:
             break;
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(166)); // about 6 hz
     }
     return (void *)1;
 }

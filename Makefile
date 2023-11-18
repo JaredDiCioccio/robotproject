@@ -1,7 +1,7 @@
 .phony: all
 
 # CC = g++
-CPPFLAGS = -Iinclude -Ithirdparty -static -std=c++11 #beaglebone doesn't have a very good compiler.
+CPPFLAGS = -Iinclude -Ithirdparty -std=c++11 #beaglebone doesn't have a very good compiler.
 LDFLAGS = -lpthread -lrobotcontrol
 
 SOURCES := $(wildcard ./*.cpp ./*.c)

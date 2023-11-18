@@ -12,4 +12,6 @@ typedef struct ImuStatus
     bool gyroError;
 } ImuStatus;
 
+void *imu_updater(void *unused);
+
 #endif

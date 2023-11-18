@@ -20,7 +20,11 @@ ImuStatus imuStatus;
 
 extern pthread_mutex_t robotStatusMutex;
 
-void *imu_updater()
+void robotImuInit(RobotState *robotState)
+{
+    robotState->imuData = &imuData;
+}
+void *imu_updater(void* unused)
 {
     rc_mpu_config_t conf = rc_mpu_default_config();
     conf.i2c_bus = I2C_BUS;
