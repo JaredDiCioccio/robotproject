@@ -1,24 +1,18 @@
 .phony: all
 
-# CC = g++
-CPPFLAGS = -Iinclude -Ithirdparty -std=c++11 #beaglebone doesn't have a very good compiler.
-LDFLAGS = -lpthread -lrobotcontrol
+CXX = arm-linux-gnueabihf-g++
+CPPFLAGS = -Iinclude -Ithirdparty -std=c++17  #beaglebone doesn't have a very good compiler.
+LDFLAGS = -lpthread -L. -lrobotcontrol
 
 SOURCES := $(wildcard ./*.cpp ./*.c)
 INCLUDES := $(wildcard ./include/*.h)
 
 OBJECTS := $(patsubst %.cpp, %.o, $(SOURCES))
 
-# $(info Sources: ${SOURCES})
-
-# $(info Objects: ${OBJECTS})
-
 .PHONY: all clean remote
 
-EXECUTABLE = 
-
 robot_main: $(OBJECTS) $(INCLUDES)
-	$(CXX) $(CFLAGS) -o $@ $^ $(LDFLAGS) -Ithirdparty -Iinclude -o robotproject
+	$(CXX) $(CFLAGS) -o $@ $^ $(LDFLAGS) -Ithirdparty -Iinclude -o robot_main -static
 
 all: robot_main
 

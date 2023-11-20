@@ -13,6 +13,10 @@
 
 BatteryStatus batteryStatus;
 
+void batteryStatusInit(RobotStatus *robotStatus){
+	robotStatus->batteryStatus = &batteryStatus;
+}
+
 void *batteryStatusUpdater(void *unused)
 {
 	robotStatus.batteryStatus = &batteryStatus;

@@ -33,20 +33,26 @@ static pthread_t errorHandlerThread;
 static pthread_t imuUpdateThread;
 static pthread_t batteryUpdateThread;
 static pthread_t lidarUpdateThread;
+static pthread_t ledUpdaterThread;
+static pthread_t statusUpdaterThread;
 
 pthread_mutex_t imuDataMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lidarDataMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t robotStatusMutex = PTHREAD_MUTEX_INITIALIZER;
+
 ////////////////////////////
 
 ////////////////////////////
 // Application info
 const char *message = "Hello robotics project";
 uint8_t running;
-pthread_mutex_t robotStatusMutex = PTHREAD_MUTEX_INITIALIZER;
 RobotStatus robotStatus;
 RobotState robotState;
+static OperationalState currentOperationalState;
+static OperationalState nextOperationalState;
+static OperationalState savedOperationalState;
 
-#define STOP_THRESHOLD 500
-
+std::unordered_map<OperationalState, std::string> stateLabels;
 //////////////////////
 
 // interrupt handler to catch ctrl-c
@@ -61,6 +67,63 @@ static void __signal_handler(__attribute__((unused)) int dummy)
 void on_pause_press();
 void on_pause_release();
 int startup();
+
+#define US_DELAY 250000
+void *ledHandler(void *unused)
+{
+    while (rc_get_state() != EXITING)
+    {
+        while (currentOperationalState == STOPPED || currentOperationalState == IDLE && rc_get_state() != EXITING)
+        {
+            rc_led_set(RC_LED_GREEN, 0);
+            rc_led_set(RC_LED_RED, 0);
+            rc_usleep(US_DELAY);
+            rc_led_set(RC_LED_RED, 1);
+            rc_usleep(US_DELAY);
+        }
+
+        while (currentOperationalState == MOVING_FORWARD && rc_get_state() != EXITING)
+        {
+            rc_led_set(RC_LED_RED, 0);
+            rc_led_set(RC_LED_GREEN, 1);
+        }
+
+        while (currentOperationalState == SCANNING && rc_get_state() != EXITING)
+        {
+            rc_led_set(RC_LED_GREEN, 1);
+            rc_usleep(US_DELAY);
+            rc_led_set(RC_LED_GREEN, 0);
+            rc_usleep(US_DELAY);
+        }
+    }
+
+    pthread_exit(NULL);
+}
+
+#include <unordered_map>
+void *statusUpdater(void *unused)
+{
+    while (rc_get_state() != EXITING)
+    {
+        spdlog::info("Robot Status: ");
+        spdlog::info("IMU data: Heading {0}, Gyro {1}, {2}, {3}", robotState.imuData->compass_heading,
+                     robotState.imuData->gyro[0], robotState.imuData->gyro[1], robotState.imuData->gyro[2]);
+        spdlog::info("IMU data: Accel  {1}, {2}, {3}",
+                     robotState.imuData->accel[0], robotState.imuData->accel[1], robotState.imuData->accel[2]); // std::unordered_map<int, ldlidar::PointData>::iterator it;
+        spdlog::info("Battery Status: Pack Voltage: {0}V", robotStatus.batteryStatus->pack_voltage);
+        // for (it = robotState.lidarMap->begin(); it != robotState.lidarMap->end(); it++)
+        // {
+        //     int angle = it->first;
+        //     ldlidar::PointData pointData = it->second;
+        //     uint64_t current = GetTimestamp();
+        //     uint64_t delta = current - pointData.stamp;
+        //     double age = delta / 1000000000.0;
+        //     spdlog::info("Angle {0} -> {1}, age {2}", pointData.angle, pointData.distance, age);
+        // }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    pthread_exit(NULL);
+}
 
 void *errorHandler(void *unused)
 {
@@ -89,6 +152,9 @@ void *errorHandler(void *unused)
     pthread_exit(NULL);
 }
 
+#include <iostream>
+#include <fstream>
+
 // Most of this borrowed from robot control lib template
 int startup()
 {
@@ -100,6 +166,35 @@ int startup()
     if (rc_enable_signal_handler() == -1)
     {
         spdlog::error("ERROR: failed to start signal handler");
+        return -1;
+    }
+
+    bool foundLidar = false;
+    // Wait until LIDAR IS AVAILABLE
+    rc_led_set(RC_LED_RED, 1);
+    rc_led_set(RC_LED_GREEN, 1);
+    int ledState = 1;
+    while (!foundLidar && rc_get_state() != EXITING)
+    {
+        std::ifstream file;
+        file.open("/dev/ttyUSB0");
+        if (file)
+        {
+            spdlog::info("Found lidar");
+            foundLidar = true;
+        }
+        else
+        {
+            spdlog::warn("Could not find lidar...");
+            ledState ^= 1;
+            rc_led_set(RC_LED_RED, ledState);
+            rc_led_set(RC_LED_GREEN, ledState);
+        }
+        rc_usleep(500000);
+    }
+
+    if (rc_get_state() == EXITING)
+    {
         return -1;
     }
 
@@ -124,12 +219,27 @@ int startup()
     spdlog::info("Testing motors Forward");
     moveForward();
     sleep(2);
+    stop();
+    sleep(0.5);
     spdlog::info("Testing motors Backward");
     moveBackward();
     sleep(2);
     stop();
+    sleep(0.5);
+    spdlog::info("Testing motors Turn Left");
+    turnLeft();
+    sleep(2);
+    stop();
+    sleep(0.5);
+    spdlog::info("Testing motors Turn Right");
+    turnRight();
+    sleep(2);
+    stop();
+
     robot_lidar_init(&robotState);
     spdlog::info("Initialized lidar");
+
+    robot_imu_init(&robotState);
     // make PID file to indicate your project is running
     // due to the check made on the call to rc_kill_existing_process() above
     // we can be fairly confident there is no PID file already and we can
@@ -137,6 +247,20 @@ int startup()
     rc_make_pid_file();
     spdlog::trace("robot_main.cpp startup() return");
     return 0;
+}
+
+// https://docs.oracle.com/cd/E19455-01/806-5257/attrib-16/index.html
+pthread_attr_t makePriorityParams(int newprio)
+{
+    pthread_attr_t tattr;
+    int ret;
+    sched_param param;
+
+    ret = pthread_attr_init(&tattr);
+    ret = pthread_attr_getschedparam(&tattr, &param);
+    param.sched_priority = newprio;
+    ret = pthread_attr_setschedparam(&tattr, &param);
+    return tattr;
 }
 
 int main(int argc, char **args)
@@ -153,6 +277,14 @@ int main(int argc, char **args)
     spdlog::set_level(spdlog::level::debug);
     spdlog::info("Starting Robotics Project");
 
+    stateLabels[MOVING_FORWARD] = "Moving Forward";
+    stateLabels[TURNING_LEFT] = "Turning Left";
+    stateLabels[TURNING_RIGHT] = "Turning Right";
+    stateLabels[SCANNING] = "Scanning";
+    stateLabels[STOPPED] = "Stopped";
+    stateLabels[IDLE] = "Idle";
+    currentOperationalState = STOPPED;
+
     int ret = startup();
     if (ret != 0)
     {
@@ -163,8 +295,11 @@ int main(int argc, char **args)
     spdlog::debug("Registered signal handler");
     // pthread_create(&loopThread, NULL, loop, NULL);
     // pthread_create(&errorHandlerThread, NULL, errorHandler, NULL);
-    // pthread_create(&imuUpdateThread, NULL, imu_updater, NULL);
+    pthread_create(&imuUpdateThread, NULL, imu_updater, NULL);
     pthread_create(&lidarUpdateThread, NULL, robot_lidar_updater, NULL);
+    pthread_create(&ledUpdaterThread, NULL, ledHandler, NULL);
+    pthread_create(&statusUpdaterThread, NULL, statusUpdater, NULL);
+    pthread_create(&batteryUpdateThread, NULL, batteryStatusUpdater, NULL);
 
     spdlog::debug("Setting inital state to PAUSED");
 
@@ -176,81 +311,78 @@ int main(int argc, char **args)
 
     while (rc_get_state() != EXITING)
     {
+        // spdlog::debug("Current State = {0}", stateLabels[currentOperationalState]);
         uint64_t currentTimestamp = GetTimestamp();
-        spdlog::debug("Tick: {0}", currentTimestamp);
-        bool shouldStop = false;
-        for (int i = 345; i < 360 && !shouldStop; i++)
+
+        if (currentOperationalState == MOVING_FORWARD)
         {
-            if (map->count(i))
-            {
-                ldlidar::PointData pointData = map->at(i);
-                spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-                if (currentTimestamp - pointData.stamp > 250000000) // 250 millsecond falloff?
-                {
-                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
-                    map->erase(i);
-                }
-                else
-                {
-                    if (pointData.distance < STOP_THRESHOLD)
-                    {
-                        spdlog::info("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-                        shouldStop = true;
-                    }
-                }
-            }
-        }
+            // spdlog::debug("In MOVING_FORWARD");
+            pthread_mutex_lock(&lidarDataMutex);
+            bool shouldStop = !fovIsClear(30);
+            pthread_mutex_unlock(&lidarDataMutex);
 
-        for (int i = 0; i < 15 && !shouldStop; i++)
-        {
-            if (map->count(i))
-            {
-
-                ldlidar::PointData pointData = map->at(i);
-                spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-
-                if (pointData.stamp > (currentTimestamp - 50000000)) // 50 millsecond falloff?
-                {
-                    spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
-                    map->erase(i);
-                }
-                else
-                {
-                    if (pointData.distance < STOP_THRESHOLD)
-                    {
-                        spdlog::info("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-                        shouldStop = true;
-                    }
-                }
-            }
-        }
-
-        if (shouldStop || rc_get_state() == PAUSED)
-        {
             if (shouldStop)
             {
-                spdlog::info("Stopping because we should stop");
+                spdlog::info("Stopping motors due to obstruction");
+                stopMotors();
+                nextOperationalState = TURNING_LEFT;
             }
-            if (rc_get_state() == PAUSED)
+            else
             {
-                spdlog::info("Sopping because we're paused");
+                // spdlog::debug("Moving forward");
+                moveForward();
             }
+        }
 
-            stopMotors();
-        }
-        else
+        if (currentOperationalState == STOPPED)
         {
-            moveForward();
+            stopMotors();
+            nextOperationalState = IDLE;
         }
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        if (currentOperationalState == SCANNING)
+        {
+            pthread_mutex_lock(&lidarDataMutex);
+            if (fovIsClear())
+            {
+                nextOperationalState = MOVING_FORWARD;
+            }
+            pthread_mutex_unlock(&lidarDataMutex);
+        }
+
+        if (currentOperationalState == TURNING_LEFT)
+        {
+            turnLeft();
+            nextOperationalState = SCANNING;
+        }
+
+        if (nextOperationalState != currentOperationalState)
+        {
+            spdlog::info("STATE CHANGE {0} -> {1}", stateLabels[currentOperationalState], stateLabels[nextOperationalState]);
+            currentOperationalState = nextOperationalState;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    rc_motor_cleanup();
-    rc_gpio_cleanup(RC_BTN_PIN_PAUSE);
     spdlog::info("Waiting for threads to exit...");
     pthread_join(lidarUpdateThread, NULL);
+    spdlog::info("Lidar thread exited");
+    pthread_join(ledUpdaterThread, NULL);
+    spdlog::info("LED thread exited");
+    pthread_join(statusUpdaterThread, NULL);
+    spdlog::info("Status update thread exited");
+    pthread_join(imuUpdateThread, NULL);
+    spdlog::info("IMU thread exited");
+    pthread_join(batteryUpdateThread, NULL);
+    spdlog::info("Battery thread exited");
 
-    spdlog::info("All threads exited. Exiting...");
+    spdlog::info("All threads exited. Cleaning up...");
+
+    stopMotors();
+    rc_motor_cleanup();
+    rc_gpio_cleanup(RC_BTN_PIN_PAUSE);
+    spdlog::info("Exiting");
     exit(0);
 }
 
@@ -263,11 +395,14 @@ void on_pause_release()
     {
         spdlog::info("Changing from RUNNING -> PAUSED");
         rc_set_state(PAUSED);
+        savedOperationalState = currentOperationalState;
+        nextOperationalState = STOPPED;
     }
     else if (rc_get_state() == PAUSED)
     {
         spdlog::info("Changing from PAUSED -> RUNNING");
         rc_set_state(RUNNING);
+        nextOperationalState = savedOperationalState;
     }
     return;
 }

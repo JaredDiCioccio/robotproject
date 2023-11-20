@@ -1,9 +1,8 @@
 #include "robot_motor.h"
 #include "rc/motor.h"
 
-MotorConfiguration leftMotorConfig ={.channel=LEFT_MOTOR_CHANNEL, .polarity=LEFT_MOTOR_POLARITY};
-MotorConfiguration rightMotorConfig ={.channel=RIGHT_MOTOR_CHANNEL, .polarity=RIGHT_MOTOR_POLARITY};
-
+MotorConfiguration leftMotorConfig = {.channel = LEFT_MOTOR_CHANNEL, .polarity = LEFT_MOTOR_POLARITY};
+MotorConfiguration rightMotorConfig = {.channel = RIGHT_MOTOR_CHANNEL, .polarity = RIGHT_MOTOR_POLARITY};
 
 int robot_motor_init()
 {
@@ -11,7 +10,8 @@ int robot_motor_init()
     return ret;
 }
 
-void stopMotors(){
+void stopMotors()
+{
     stop();
 }
 void stop()
@@ -22,14 +22,14 @@ void stop()
 
 void moveForward()
 {
-    rc_motor_set(leftMotorConfig.channel, 0.20 * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, 0.20 * rightMotorConfig.polarity);
+    rc_motor_set(leftMotorConfig.channel, 0.35 * leftMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, 0.35 * rightMotorConfig.polarity);
 }
 
 void moveBackward()
 {
-    rc_motor_set(leftMotorConfig.channel, -0.20 * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, -0.20 * rightMotorConfig.polarity);
+    rc_motor_set(leftMotorConfig.channel, -0.35 * leftMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, -0.35 * rightMotorConfig.polarity);
 }
 
 void turnLeft()

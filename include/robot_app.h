@@ -1,13 +1,25 @@
-#ifndef APP_H
-#define APP_H
-
-#include "robot_imu.h"
-#include "robot_battery.h"
-#include "robot_app.h"
+#ifndef ROBOT_APP_H
+#define ROBOT_APP_H
 
 #include "ldlidar_driver/ldlidar_datatype.h"
+#include <rc/mpu.h>
 
 #include <unordered_map>
+
+typedef struct BatteryStatus
+{
+    double pack_voltage; // 2S pack voltage on JST XH 2S balance connector
+    double cell_voltage; // cell voltage
+    double jack_voltage; // could be dc power supply or another battery
+    bool error;
+} BatteryStatus;
+
+typedef struct ImuStatus
+{
+    bool accelError;
+    bool initError;
+    bool gyroError;
+} ImuStatus;
 
 typedef struct RobotStatus
 {
@@ -22,7 +34,15 @@ typedef struct RobotState
     std::unordered_map<int, ldlidar::PointData> *lidarMap;
 } RobotState;
 
-extern uint8_t running;
+enum OperationalState
+{
+    MOVING_FORWARD,
+    STOPPED,
+    TURNING_LEFT,
+    TURNING_RIGHT,
+    SCANNING,
+    IDLE
+};
 
 extern pthread_mutex_t robotStatusMutex;
 extern RobotStatus robotStatus;
@@ -32,5 +52,7 @@ extern rc_mpu_data_t imuData;
 
 extern pthread_mutex_t robotStateMutex;
 extern RobotState robotState;
+
+#define STOP_THRESHOLD 300
 
 #endif

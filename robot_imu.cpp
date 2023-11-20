@@ -9,6 +9,7 @@
 #include "spdlog/spdlog.h"
 ////////////////////////////
 // MY HEADERS
+#include "robot_imu.h"
 #include "robot_app.h"
 ////////////////////////////
 
@@ -20,11 +21,12 @@ ImuStatus imuStatus;
 
 extern pthread_mutex_t robotStatusMutex;
 
-void robotImuInit(RobotState *robotState)
+void robot_imu_init(RobotState *robotState)
 {
     robotState->imuData = &imuData;
 }
-void *imu_updater(void* unused)
+
+void *imu_updater(void *unused)
 {
     rc_mpu_config_t conf = rc_mpu_default_config();
     conf.i2c_bus = I2C_BUS;
