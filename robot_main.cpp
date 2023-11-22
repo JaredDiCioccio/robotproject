@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <unordered_map>
+#include <iostream>
+#include <fstream>
 // SYSTEM HEADERS
 #include <pthread.h>
 #include <signal.h>
@@ -17,6 +19,7 @@
 #include "spdlog/sinks/stdout_sinks.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "ldlidar_driver/ldlidar_datatype.h"
+#include "ini.h"
 ////////////////////////////
 // MY HEADERS
 #include "robot_app.h"
@@ -51,6 +54,7 @@ RobotState robotState;
 static OperationalState currentOperationalState;
 static OperationalState nextOperationalState;
 static OperationalState savedOperationalState;
+RobotConfiguration robotConfiguration;
 
 std::unordered_map<OperationalState, std::string> stateLabels;
 //////////////////////
@@ -100,7 +104,6 @@ void *ledHandler(void *unused)
     pthread_exit(NULL);
 }
 
-#include <unordered_map>
 void *statusUpdater(void *unused)
 {
     while (rc_get_state() != EXITING)
@@ -151,9 +154,6 @@ void *errorHandler(void *unused)
     }
     pthread_exit(NULL);
 }
-
-#include <iostream>
-#include <fstream>
 
 // Most of this borrowed from robot control lib template
 int startup()
@@ -217,22 +217,22 @@ int startup()
     }
     spdlog::info("Initialized motors");
     spdlog::info("Testing motors Forward");
-    moveForward();
+    moveForward(robotConfiguration.motorSpeedForward);
     sleep(2);
     stop();
     sleep(0.5);
     spdlog::info("Testing motors Backward");
-    moveBackward();
+    moveBackward(robotConfiguration.motorSpeedBackward);
     sleep(2);
     stop();
     sleep(0.5);
     spdlog::info("Testing motors Turn Left");
-    turnLeft();
+    turnLeft(robotConfiguration.motorSpeedTurn);
     sleep(2);
     stop();
     sleep(0.5);
     spdlog::info("Testing motors Turn Right");
-    turnRight();
+    turnRight(robotConfiguration.motorSpeedTurn);
     sleep(2);
     stop();
 
@@ -263,9 +263,36 @@ pthread_attr_t makePriorityParams(int newprio)
     return tattr;
 }
 
+void parseIni()
+{
+    mINI::INIFile file("robot_parameters.ini");
+    mINI::INIStructure ini;
+    spdlog::info("Parsing ini file.");
+    file.read(ini);
+    spdlog::info("Parsing ini file. Done");
+
+    float backwardDuty = std::stof(ini["motor"]["backwardDuty"]);
+    float turnDuty = std::stof(ini["motor"]["turnDuty"]);
+    float forwardDuty = std::stof(ini["motor"]["forwardDuty"]);
+    int stopThreshold = std::stoi(ini["lidar"]["stopThreshold"]);
+
+    robotConfiguration.motorSpeedBackward = backwardDuty;
+    robotConfiguration.motorSpeedForward = forwardDuty;
+    robotConfiguration.motorSpeedTurn = turnDuty;
+    robotConfiguration.stopThreshold = stopThreshold;
+
+    spdlog::info("Motor Speed Forward: {0}", forwardDuty);
+
+    spdlog::info("Motor Speed Backward: {0}", backwardDuty);
+    spdlog::info("Motor Speed Turn: {0}", turnDuty);
+    spdlog::info("Stop Threshold {0}", stopThreshold);
+}
+
 int main(int argc, char **args)
 {
     const auto startupTime = std::chrono::steady_clock::now();
+    parseIni();
+
     // int epochCount = startupTime.time_since_epoch().count();
     // std::string filename = "robot_log_" + std::to_string(epochCount) + ".log";
     // std::vector<spdlog::sink_ptr> sinks;
@@ -330,7 +357,7 @@ int main(int argc, char **args)
             else
             {
                 // spdlog::debug("Moving forward");
-                moveForward();
+                moveForward(robotConfiguration.motorSpeedForward);
             }
         }
 
@@ -352,7 +379,7 @@ int main(int argc, char **args)
 
         if (currentOperationalState == TURNING_LEFT)
         {
-            turnLeft();
+            turnLeft(0.10);
             nextOperationalState = SCANNING;
         }
 

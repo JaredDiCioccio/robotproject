@@ -6,6 +6,14 @@
 
 #include <unordered_map>
 
+
+struct RobotConfiguration{
+    float motorSpeedForward;
+    float motorSpeedBackward;
+    float motorSpeedTurn;
+    float stopThreshold;
+};
+
 typedef struct BatteryStatus
 {
     double pack_voltage; // 2S pack voltage on JST XH 2S balance connector
@@ -52,7 +60,6 @@ extern rc_mpu_data_t imuData;
 
 extern pthread_mutex_t robotStateMutex;
 extern RobotState robotState;
-
-#define STOP_THRESHOLD 300
+extern RobotConfiguration robotConfiguration;
 
 #endif

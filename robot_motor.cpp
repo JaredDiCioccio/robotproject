@@ -20,28 +20,25 @@ void stop()
     rc_motor_set(RIGHT_MOTOR_CHANNEL, 0);
 }
 
-void moveForward()
+void moveForward(float duty)
 {
-    rc_motor_set(leftMotorConfig.channel, 0.35 * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, 0.35 * rightMotorConfig.polarity);
+    rc_motor_set(leftMotorConfig.channel, duty * leftMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, duty * rightMotorConfig.polarity);
 }
 
-void moveBackward()
+void moveBackward(float duty)
 {
-    rc_motor_set(leftMotorConfig.channel, -0.35 * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, -0.35 * rightMotorConfig.polarity);
+    rc_motor_set(leftMotorConfig.channel, -duty * leftMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, -duty * rightMotorConfig.polarity);
 }
 
-void turnLeft()
-{
-    stop();
-    rc_motor_set(leftMotorConfig.channel, -0.20 * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, 0.20 * rightMotorConfig.polarity);
+void turnLeft(float duty){
+    rc_motor_set(leftMotorConfig.channel, duty * leftMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, -duty * rightMotorConfig.polarity);
 }
 
-void turnRight()
+void turnRight(float duty)
 {
-    stop();
-    rc_motor_set(leftMotorConfig.channel, 0.15 * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, -0.15 * rightMotorConfig.polarity);
+    rc_motor_set(leftMotorConfig.channel, duty * leftMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, -duty * rightMotorConfig.polarity);
 }

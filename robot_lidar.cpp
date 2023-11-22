@@ -150,7 +150,7 @@ bool fovIsClear(int centerAngle, int fov)
             }
             else
             {
-                if (pointData.distance < STOP_THRESHOLD)
+                if (pointData.distance < robotConfiguration.stopThreshold)
                 {
                     spdlog::info("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
                     return false;
@@ -191,7 +191,7 @@ bool fovIsClear(int fov)
             }
             else
             {
-                if (pointData.distance < STOP_THRESHOLD)
+                if (pointData.distance < robotConfiguration.stopThreshold)
                 {
                     // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1} BAD", pointData.angle, pointData.distance, pointData.stamp);
                     return false;
@@ -219,7 +219,7 @@ bool fovIsClear(int fov)
             }
             else
             {
-                if (pointData.distance < STOP_THRESHOLD)
+                if (pointData.distance < robotConfiguration.stopThreshold)
                 {
                     // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1} BAD", pointData.angle, pointData.distance, pointData.stamp);
                     return false;

@@ -16,6 +16,11 @@ typedef struct CurrentMotorState{
 #define LEFT_MOTOR_POLARITY 1
 #define RIGHT_MOTOR_POLARITY -1
 
+
+#define DEFAULT_TURNING_DUTY 0.10
+#define DEFAULT_FORWARD_DUTY 0.35
+#define DEFAULT_BACKWARD_DUTY -0.25
+
 struct MotorConfiguration{
     int channel;
     int polarity;
@@ -24,12 +29,14 @@ struct MotorConfiguration{
 int robot_motor_init();
 void stop();
 void stopMotors();
-void moveForward();
-void moveBackward();
+
+void moveForward(float duty);
+void moveBackward(float duty);
+void turnLeft(float duty);
+void turnRight(float duty);
+
 void setMotorLeft(float duty);
 void setMotorRight(float duty);
-void turnLeft();
-void turnRight();
 
 
 #endif
