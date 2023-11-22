@@ -30,7 +30,7 @@ void *imu_updater(void *unused)
 {
     rc_mpu_config_t conf = rc_mpu_default_config();
     conf.i2c_bus = I2C_BUS;
-    conf.enable_magnetometer = 0;
+    conf.enable_magnetometer = 1;
     conf.show_warnings = 0;
     robotStatus.imuStatus = &imuStatus;
 
@@ -56,6 +56,9 @@ void *imu_updater(void *unused)
         pthread_mutex_lock(&imuDataMutex);
         accelStatus = rc_mpu_read_accel(&imuData);
         gyroStatus = rc_mpu_read_gyro(&imuData);
+        rc_mpu_read_mag(&imuData);
+        rc_mpu_read_temp(&imuData);
+        
         pthread_mutex_unlock(&imuDataMutex);
 
         if (accelStatus < 0)

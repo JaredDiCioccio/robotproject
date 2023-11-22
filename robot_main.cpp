@@ -109,9 +109,8 @@ void *statusUpdater(void *unused)
     while (rc_get_state() != EXITING)
     {
         spdlog::info("Robot Status: ");
-        spdlog::info("IMU data: Heading {0}, Gyro {1}, {2}, {3}", robotState.imuData->compass_heading,
-                     robotState.imuData->gyro[0], robotState.imuData->gyro[1], robotState.imuData->gyro[2]);
-        spdlog::info("IMU data: Accel  {1}, {2}, {3}",
+        spdlog::info("IMU data: Heading {0}, Gyro {1}, {2}, {3}", robotState.imuData->gyro[0], robotState.imuData->gyro[1], robotState.imuData->gyro[2]);
+        spdlog::info("IMU data: Accel  {0}, {1}, {2}",
                      robotState.imuData->accel[0], robotState.imuData->accel[1], robotState.imuData->accel[2]); // std::unordered_map<int, ldlidar::PointData>::iterator it;
         spdlog::info("Battery Status: Pack Voltage: {0}V", robotStatus.batteryStatus->pack_voltage);
         // for (it = robotState.lidarMap->begin(); it != robotState.lidarMap->end(); it++)
@@ -263,11 +262,11 @@ pthread_attr_t makePriorityParams(int newprio)
     return tattr;
 }
 
-void parseIni()
+void parseIni(std::string &iniFile)
 {
-    mINI::INIFile file("robot_parameters.ini");
+    mINI::INIFile file(iniFile);
     mINI::INIStructure ini;
-    spdlog::info("Parsing ini file.");
+    spdlog::info("Parsing ini file. {0}", iniFile);
     file.read(ini);
     spdlog::info("Parsing ini file. Done");
 
@@ -291,7 +290,12 @@ void parseIni()
 int main(int argc, char **args)
 {
     const auto startupTime = std::chrono::steady_clock::now();
-    parseIni();
+    std::string iniFile = "robot_configuration.ini";
+    if(argc > 1){
+        iniFile = args[1];
+    }
+    
+    parseIni(iniFile);
 
     // int epochCount = startupTime.time_since_epoch().count();
     // std::string filename = "robot_log_" + std::to_string(epochCount) + ".log";
@@ -379,7 +383,7 @@ int main(int argc, char **args)
 
         if (currentOperationalState == TURNING_LEFT)
         {
-            turnLeft(0.10);
+            turnLeft(robotConfiguration.motorSpeedTurn);
             nextOperationalState = SCANNING;
         }
 

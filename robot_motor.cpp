@@ -32,13 +32,14 @@ void moveBackward(float duty)
     rc_motor_set(rightMotorConfig.channel, -duty * rightMotorConfig.polarity);
 }
 
-void turnLeft(float duty){
+void turnLeft(float duty)
+{
     rc_motor_set(leftMotorConfig.channel, duty * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, -duty * rightMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, -duty * 1.10 * rightMotorConfig.polarity);
 }
 
 void turnRight(float duty)
 {
-    rc_motor_set(leftMotorConfig.channel, duty * leftMotorConfig.polarity);
-    rc_motor_set(rightMotorConfig.channel, -duty * rightMotorConfig.polarity);
+    rc_motor_set(leftMotorConfig.channel, -duty * leftMotorConfig.polarity);
+    rc_motor_set(rightMotorConfig.channel, duty * rightMotorConfig.polarity);
 }
