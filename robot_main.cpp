@@ -215,26 +215,29 @@ int startup()
         return -1;
     }
     spdlog::info("Initialized motors");
-    spdlog::info("Testing motors Forward");
-    moveForward(robotConfiguration.motorSpeedForward);
-    sleep(2);
-    stop();
-    sleep(0.5);
-    spdlog::info("Testing motors Backward");
-    moveBackward(robotConfiguration.motorSpeedBackward);
-    sleep(2);
-    stop();
-    sleep(0.5);
-    spdlog::info("Testing motors Turn Left");
-    turnLeft(robotConfiguration.motorSpeedTurn);
-    sleep(2);
-    stop();
-    sleep(0.5);
-    spdlog::info("Testing motors Turn Right");
-    turnRight(robotConfiguration.motorSpeedTurn);
-    sleep(2);
-    stop();
+    if (robotConfiguration.motorRunTest)
+    {
 
+        spdlog::info("Testing motors Forward");
+        moveForward(robotConfiguration.motorSpeedForward);
+        sleep(2);
+        stop();
+        sleep(0.5);
+        spdlog::info("Testing motors Backward");
+        moveBackward(robotConfiguration.motorSpeedBackward);
+        sleep(2);
+        stop();
+        sleep(0.5);
+        spdlog::info("Testing motors Turn Left");
+        turnLeft(robotConfiguration.motorSpeedTurn);
+        sleep(2);
+        stop();
+        sleep(0.5);
+        spdlog::info("Testing motors Turn Right");
+        turnRight(robotConfiguration.motorSpeedTurn);
+        sleep(2);
+        stop();
+    }
     robot_lidar_init(&robotState);
     spdlog::info("Initialized lidar");
 
@@ -274,11 +277,12 @@ void parseIni(std::string &iniFile)
     float turnDuty = std::stof(ini["motor"]["turnDuty"]);
     float forwardDuty = std::stof(ini["motor"]["forwardDuty"]);
     int stopThreshold = std::stoi(ini["lidar"]["stopThreshold"]);
-
+    bool runMotorTest = ini["motor"].has("startupTest");
     robotConfiguration.motorSpeedBackward = backwardDuty;
     robotConfiguration.motorSpeedForward = forwardDuty;
     robotConfiguration.motorSpeedTurn = turnDuty;
     robotConfiguration.stopThreshold = stopThreshold;
+    robotConfiguration.motorRunTest = runMotorTest;
 
     spdlog::info("Motor Speed Forward: {0}", forwardDuty);
 
@@ -291,10 +295,11 @@ int main(int argc, char **args)
 {
     const auto startupTime = std::chrono::steady_clock::now();
     std::string iniFile = "robot_configuration.ini";
-    if(argc > 1){
+    if (argc > 1)
+    {
         iniFile = args[1];
     }
-    
+
     parseIni(iniFile);
 
     // int epochCount = startupTime.time_since_epoch().count();
@@ -348,9 +353,7 @@ int main(int argc, char **args)
         if (currentOperationalState == MOVING_FORWARD)
         {
             // spdlog::debug("In MOVING_FORWARD");
-            pthread_mutex_lock(&lidarDataMutex);
             bool shouldStop = !fovIsClear(30);
-            pthread_mutex_unlock(&lidarDataMutex);
 
             if (shouldStop)
             {
@@ -373,12 +376,10 @@ int main(int argc, char **args)
 
         if (currentOperationalState == SCANNING)
         {
-            pthread_mutex_lock(&lidarDataMutex);
             if (fovIsClear(30))
             {
                 nextOperationalState = MOVING_FORWARD;
             }
-            pthread_mutex_unlock(&lidarDataMutex);
         }
 
         if (currentOperationalState == TURNING_LEFT)
@@ -393,7 +394,7 @@ int main(int argc, char **args)
             currentOperationalState = nextOperationalState;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 
     spdlog::info("Waiting for threads to exit...");

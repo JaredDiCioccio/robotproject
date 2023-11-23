@@ -25,10 +25,8 @@ uint64_t GetTimestamp(void)
     return ((uint64_t)tmp.count());
 }
 
-// Lidar runs about 10hz max, that's 100ms a revolution
-// 100ms = 100*1000 = 100000 ns
-//  99133184
-#define POINT_DATA_TTL 10000000
+#define POINT_DATA_TTL 250000000
+
 void robot_lidar_init(RobotState *robotState)
 {
     robotState->lidarData = &pointsBuffer;
@@ -80,31 +78,44 @@ void *robot_lidar_updater(void *unused)
         {
         case ldlidar::LidarStatus::NORMAL:
         {
-            double lidar_scan_freq = 0;
-            lidar_drv->GetLidarScanFreq(lidar_scan_freq);
-            lidar_scan_freq, laser_scan_points.size(), laser_scan_points.front().stamp, laser_scan_points.back().stamp;
-
+            uint64_t currentTimestamp = GetTimestamp();
             pthread_mutex_lock(&lidarDataMutex);
+            auto itr = pointsBuffer.begin();
+            while (itr != pointsBuffer.end() && rc_get_state() != EXITING)
+            {
+                uint64_t age = currentTimestamp - itr->stamp;
 
-            auto newEnd = std::remove_if(
-                laser_scan_points.begin(),
-                laser_scan_points.end(),
-                [](ldlidar::PointData pointData)
+                if (age > POINT_DATA_TTL)
                 {
-                    return pointData.intensity < 200 || GetTimestamp() - pointData.stamp >= POINT_DATA_TTL;
-                });
-            laser_scan_points.erase(newEnd, laser_scan_points.end());
+                    itr = pointsBuffer.erase(itr);
+                }
+                else
+                {
+                    itr++;
+                }
+            }
 
-            // for (auto point : laser_scan_points)
-            // {
-            //     point.stamp, point.angle, point.distance, point.intensity;
-            //     int roundedAngle = std::round(point.angle);
-            //     if (pointsMap.count(roundedAngle))
-            //     {
-            //         pointsMap.erase(roundedAngle);
-            //     }
-            //     pointsMap.insert({roundedAngle, point});
-            // }
+            for (auto pointData : laser_scan_points)
+            {
+
+                // uint64_t age = GetTimestamp() - pointData.stamp;
+                // spdlog::debug("PointData {0}: {1} deg, {2} dist, {3} intensity, {4} age ",
+                //               pointData.stamp,
+                //               pointData.angle,
+                //               pointData.distance,
+                //               pointData.intensity,
+                //               age);
+                if (pointData.intensity >= 200)
+                {
+                    pointsBuffer.push_back(pointData);
+                }
+                else
+                {
+                    // badPointsString += std::to_string(pointData.angle) + ":" + std::to_string(pointData.intensity) + ",";
+                }
+            }
+            // spdlog::info(badPointsString);
+
             pthread_mutex_unlock(&lidarDataMutex);
 
             break;
@@ -124,7 +135,7 @@ void *robot_lidar_updater(void *unused)
             spdlog::error("lidar unknow error");
             break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // about 6 hz
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     lidar_drv->Stop();
     pthread_exit(NULL);
@@ -186,21 +197,41 @@ bool fovIsClear()
 // Input full fov. Will scan +- fov/2 in either direction.
 bool fovIsClear(int fov)
 {
+    pthread_mutex_lock(&lidarDataMutex);
     uint64_t currentTimestamp = GetTimestamp();
-
+    bool clear = true;
     if (fov % 2 != 0)
     {
         fov += 1;
     }
 
     int halfFov = fov / 2;
-    for (auto pointData : pointsBuffer)
+    auto itr = pointsBuffer.begin();
+    spdlog::debug("Checking {1} points for if fov is clear {0}", currentTimestamp, pointsBuffer.size());
+    while (itr != pointsBuffer.end() && rc_get_state() != EXITING)
     {
-        if (pointData.distance <= robotConfiguration.stopThreshold && pointData.angle >= 360 - halfFov && pointData.angle <= halfFov)
+        uint64_t age = currentTimestamp - itr->stamp;
+
+        if (!(itr->angle >= 360 - halfFov || itr->angle <= halfFov))
         {
-            return false;
+            itr = pointsBuffer.erase(itr);
+        }
+        else if (age > POINT_DATA_TTL)
+        {
+            spdlog::debug("Removing angle {0} due to age {1} - {2} = {3}", itr->angle, currentTimestamp, itr->stamp, age);
+            itr = pointsBuffer.erase(itr);
+        }
+        else
+        {
+            if (itr->distance <= robotConfiguration.stopThreshold)
+            {
+                spdlog::info("Found obstacle at {0} deg, {1} distance", itr->angle, itr->distance);
+                clear = false;
+            }
+            itr++;
         }
     }
-
-    return true;
+    spdlog::debug("FOV is clear: {0}", clear);
+    pthread_mutex_unlock(&lidarDataMutex);
+    return clear;
 }

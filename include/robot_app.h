@@ -11,7 +11,8 @@ struct RobotConfiguration
     float motorSpeedForward;
     float motorSpeedBackward;
     float motorSpeedTurn;
-    float stopThreshold;
+    int stopThreshold;
+    bool motorRunTest;
 };
 
 typedef struct BatteryStatus
