@@ -16,7 +16,6 @@
 // Note, some of these functions taken from the ldlidar demo application
 
 ldlidar::Points2D pointsBuffer;
-std::unordered_map<int, ldlidar::PointData> pointsMap;
 extern pthread_mutex_t lidarDataMutex;
 uint64_t GetTimestamp(void)
 {
@@ -26,9 +25,13 @@ uint64_t GetTimestamp(void)
     return ((uint64_t)tmp.count());
 }
 
+// Lidar runs about 10hz max, that's 100ms a revolution
+// 100ms = 100*1000 = 100000 ns
+//  99133184
+#define POINT_DATA_TTL 10000000
 void robot_lidar_init(RobotState *robotState)
 {
-    robotState->lidarMap = &pointsMap;
+    robotState->lidarData = &pointsBuffer;
 }
 
 void *robot_lidar_updater(void *unused)
@@ -82,16 +85,26 @@ void *robot_lidar_updater(void *unused)
             lidar_scan_freq, laser_scan_points.size(), laser_scan_points.front().stamp, laser_scan_points.back().stamp;
 
             pthread_mutex_lock(&lidarDataMutex);
-            for (auto point : laser_scan_points)
-            {
-                point.stamp, point.angle, point.distance, point.intensity;
-                int roundedAngle = std::round(point.angle);
-                if (pointsMap.count(roundedAngle))
+
+            auto newEnd = std::remove_if(
+                laser_scan_points.begin(),
+                laser_scan_points.end(),
+                [](ldlidar::PointData pointData)
                 {
-                    pointsMap.erase(roundedAngle);
-                }
-                pointsMap.insert({roundedAngle, point});
-            }
+                    return pointData.intensity < 200 || GetTimestamp() - pointData.stamp >= POINT_DATA_TTL;
+                });
+            laser_scan_points.erase(newEnd, laser_scan_points.end());
+
+            // for (auto point : laser_scan_points)
+            // {
+            //     point.stamp, point.angle, point.distance, point.intensity;
+            //     int roundedAngle = std::round(point.angle);
+            //     if (pointsMap.count(roundedAngle))
+            //     {
+            //         pointsMap.erase(roundedAngle);
+            //     }
+            //     pointsMap.insert({roundedAngle, point});
+            // }
             pthread_mutex_unlock(&lidarDataMutex);
 
             break;
@@ -111,55 +124,59 @@ void *robot_lidar_updater(void *unused)
             spdlog::error("lidar unknow error");
             break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(166)); // about 6 hz
+        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // about 6 hz
     }
     lidar_drv->Stop();
     pthread_exit(NULL);
 }
 
 // This does not handle 0 crossing
-bool fovIsClear(int centerAngle, int fov)
-{
-    uint64_t currentTimestamp = GetTimestamp();
+// bool fovIsClear(int centerAngle, int fov)
+// {
+//     uint64_t currentTimestamp = GetTimestamp();
 
-    if (centerAngle < 360)
-    {
-        centerAngle = 360 + centerAngle;
-        // StartAngle = -60
-        // StartAngle -> 360 + 60 = 300
-    }
-    if (fov % 2 != 0)
-    {
-        fov += 1;
-    }
+//     if (centerAngle < 360)
+//     {
+//         centerAngle = 360 + centerAngle;
+//         // StartAngle = -60
+//         // StartAngle -> 360 + 60 = 300
+//     }
+//     if (fov % 2 != 0)
+//     {
+//         fov += 1;
+//     }
 
-    int halfFov = fov / 2;
+//     int halfFov = fov / 2;
 
-    // startAngle =300, fov = 30
-    // Check from 285 - 315
-    for (int i = centerAngle - halfFov; i < centerAngle + halfFov; i++)
-    {
-        if (pointsMap.count(i))
-        {
-            ldlidar::PointData pointData = pointsMap.at(i);
-            spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-            if (currentTimestamp - pointData.stamp > 250000000) // 250 millsecond falloff?
-            {
-                spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
-                pointsMap.erase(i);
-            }
-            else
-            {
-                if (pointData.distance < robotConfiguration.stopThreshold)
-                {
-                    spdlog::info("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
+//     // startAngle =300, fov = 30
+//     // Check from 285 - 315
+
+//     for(auto pointData : pointsBuffer){
+
+//     }
+//     for (int i = centerAngle - halfFov; i < centerAngle + halfFov; i++)
+//     {
+//         if (pointsMap.count(i))
+//         {
+//             ldlidar::PointData pointData = pointsMap.at(i);
+//             spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
+//             if (currentTimestamp - pointData.stamp > 250000000) // 250 millsecond falloff?
+//             {
+//                 spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
+//                 pointsMap.erase(i);
+//             }
+//             else
+//             {
+//                 if (pointData.distance < robotConfiguration.stopThreshold)
+//                 {
+//                     spdlog::info("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
+//                     return false;
+//                 }
+//             }
+//         }
+//     }
+//     return true;
+// }
 
 bool fovIsClear()
 {
@@ -177,59 +194,13 @@ bool fovIsClear(int fov)
     }
 
     int halfFov = fov / 2;
-
-    for (int i = 360 - halfFov; i < 360; i++)
+    for (auto pointData : pointsBuffer)
     {
-        if (pointsMap.count(i))
+        if (pointData.distance <= robotConfiguration.stopThreshold && pointData.angle >= 360 - halfFov && pointData.angle <= halfFov)
         {
-            ldlidar::PointData pointData = pointsMap.at(i);
-            // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-            if (currentTimestamp - pointData.stamp > 250000000) // 250 millsecond falloff?
-            {
-                // spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
-                pointsMap.erase(i);
-            }
-            else
-            {
-                if (pointData.distance < robotConfiguration.stopThreshold)
-                {
-                    // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1} BAD", pointData.angle, pointData.distance, pointData.stamp);
-                    return false;
-                }
-                else
-                {
-                    // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1} OK", pointData.angle, pointData.distance, pointData.stamp);
-                }
-            }
+            return false;
         }
     }
 
-    for (int i = 0; i < halfFov; i++)
-    {
-        if (pointsMap.count(i))
-        {
-
-            ldlidar::PointData pointData = pointsMap.at(i);
-            // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1}", pointData.angle, pointData.distance, pointData.stamp);
-
-            if (pointData.stamp > (currentTimestamp - 250000000)) // 50 millsecond falloff?
-            {
-                // spdlog::debug("Erasing old data Old stamp: {0}, current time {1}, delta {2}. Angle {3}->{4}", pointData.stamp, currentTimestamp, currentTimestamp - pointData.stamp, i, pointData.distance);
-                pointsMap.erase(i);
-            }
-            else
-            {
-                if (pointData.distance < robotConfiguration.stopThreshold)
-                {
-                    // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1} BAD", pointData.angle, pointData.distance, pointData.stamp);
-                    return false;
-                }
-                else
-                {
-                    // spdlog::debug("Timestamp: {2}: \tAngle {0} -> {1} OK", pointData.angle, pointData.distance, pointData.stamp);
-                }
-            }
-        }
-    }
     return true;
 }

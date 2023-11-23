@@ -6,8 +6,8 @@
 
 #include <unordered_map>
 
-
-struct RobotConfiguration{
+struct RobotConfiguration
+{
     float motorSpeedForward;
     float motorSpeedBackward;
     float motorSpeedTurn;
@@ -40,6 +40,7 @@ typedef struct RobotState
 {
     rc_mpu_data_t *imuData;
     std::unordered_map<int, ldlidar::PointData> *lidarMap;
+    std::vector<ldlidar::PointData> *lidarData;
 } RobotState;
 
 enum OperationalState

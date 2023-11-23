@@ -374,7 +374,7 @@ int main(int argc, char **args)
         if (currentOperationalState == SCANNING)
         {
             pthread_mutex_lock(&lidarDataMutex);
-            if (fovIsClear())
+            if (fovIsClear(30))
             {
                 nextOperationalState = MOVING_FORWARD;
             }
