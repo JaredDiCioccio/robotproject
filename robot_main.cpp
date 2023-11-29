@@ -192,6 +192,16 @@ int startup()
         rc_usleep(500000);
     }
 
+    ledState = 0;
+    rc_led_set(RC_LED_RED, 0);
+    rc_led_set(RC_LED_GREEN, 0);
+    for (int i = 0; i < 6; i++)
+    {
+        ledState ^= 1;
+        rc_led_set(RC_LED_GREEN, ledState);
+        rc_usleep(500000);
+    }
+
     if (rc_get_state() == EXITING)
     {
         return -1;
@@ -285,7 +295,6 @@ void parseIni(std::string &iniFile)
     robotConfiguration.motorRunTest = runMotorTest;
 
     spdlog::info("Motor Speed Forward: {0}", forwardDuty);
-
     spdlog::info("Motor Speed Backward: {0}", backwardDuty);
     spdlog::info("Motor Speed Turn: {0}", turnDuty);
     spdlog::info("Stop Threshold {0}", stopThreshold);
@@ -293,11 +302,19 @@ void parseIni(std::string &iniFile)
 
 int main(int argc, char **args)
 {
+    spdlog::set_level(spdlog::level::debug);
+    spdlog::info("Starting Robot Project");
+    spdlog::debug("There are {0} args", argc);
     const auto startupTime = std::chrono::steady_clock::now();
-    std::string iniFile = "robot_configuration.ini";
+    std::string iniFile = "/home/debian/robot_configuration.ini";
     if (argc > 1)
     {
         iniFile = args[1];
+    }
+
+    for (int i = 0; i < argc; i++)
+    {
+        spdlog::debug("Arg {0} = {1}", i, args[i]);
     }
 
     parseIni(iniFile);
@@ -310,11 +327,10 @@ int main(int argc, char **args)
     // auto combined_logger = std::make_shared<spdlog::logger>("RobotLogger", std::begin(sinks), std::end(sinks));
     // register it if you need to access it globally
     // spdlog::register_logger(combined_logger);
-    spdlog::set_level(spdlog::level::debug);
     spdlog::info("Starting Robotics Project");
 
     stateLabels[MOVING_FORWARD] = "Moving Forward";
-    stateLabels[TURNING_LEFT] = "Turning Left";
+    stateLabels[TURNING] = "Turning Left";
     stateLabels[TURNING_RIGHT] = "Turning Right";
     stateLabels[SCANNING] = "Scanning";
     stateLabels[STOPPED] = "Stopped";
@@ -359,7 +375,7 @@ int main(int argc, char **args)
             {
                 spdlog::info("Stopping motors due to obstruction");
                 stopMotors();
-                nextOperationalState = TURNING_LEFT;
+                nextOperationalState = TURNING;
             }
             else
             {
@@ -382,9 +398,16 @@ int main(int argc, char **args)
             }
         }
 
-        if (currentOperationalState == TURNING_LEFT)
+        if (currentOperationalState == TURNING)
         {
-            turnLeft(robotConfiguration.motorSpeedTurn);
+            if (GetTimestamp() % 2 == 0)
+            {
+                turnLeft(robotConfiguration.motorSpeedTurn);
+            }
+            else
+            {
+                turnRight(robotConfiguration.motorSpeedTurn);
+            }
             nextOperationalState = SCANNING;
         }
 
@@ -394,7 +417,7 @@ int main(int argc, char **args)
             currentOperationalState = nextOperationalState;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     spdlog::info("Waiting for threads to exit...");
@@ -414,6 +437,8 @@ int main(int argc, char **args)
     stopMotors();
     rc_motor_cleanup();
     rc_gpio_cleanup(RC_BTN_PIN_PAUSE);
+    rc_led_set(RC_LED_GREEN, 0);
+    rc_led_set(RC_LED_RED, 0);
     spdlog::info("Exiting");
     exit(0);
 }

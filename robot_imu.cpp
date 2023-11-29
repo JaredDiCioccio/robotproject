@@ -80,7 +80,7 @@ void *imu_updater(void *unused)
             spdlog::error("Error reading IMU Gyro Data");
         }
 
-        rc_usleep(1000000 / 100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     return nullptr;

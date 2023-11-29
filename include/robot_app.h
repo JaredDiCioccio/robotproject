@@ -48,7 +48,7 @@ enum OperationalState
 {
     MOVING_FORWARD,
     STOPPED,
-    TURNING_LEFT,
+    TURNING,
     TURNING_RIGHT,
     SCANNING,
     IDLE

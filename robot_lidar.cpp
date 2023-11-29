@@ -199,6 +199,10 @@ bool fovIsClear(int fov)
 {
     pthread_mutex_lock(&lidarDataMutex);
     uint64_t currentTimestamp = GetTimestamp();
+    if (pointsBuffer.size() < 5)
+    {
+        return false;
+    }
     bool clear = true;
     if (fov % 2 != 0)
     {
